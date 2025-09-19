@@ -1,8 +1,8 @@
-# TP1 - ELE042 Processamento de Sinais
+# TP1 - ELE042 Processamento de Sinais - Turma TTTO
 
 Trabalho prático da disciplina **Processamento de Sinais (ELE042)** - UFMG.
 
 ## Integrantes
-- Ana Júlia
+- Ana Julia Vieira Amorim
 - Henrique Marques Cruz
-- Mike Nunes
+- Mike Monteiro Nunes
