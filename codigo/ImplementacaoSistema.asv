@@ -44,9 +44,9 @@ else
 end
 
 %% ------- 1.2 Gráfico da forma de onda (tempo em s) -------
-figure('Name','1. Carregamento de dados e apresentação de características básicas',...
-       'NumberTitle','off','Position',[250 100 800 500]);
-subplot(5,2,[1 2]); % pega colunas 1 e 2 da primeira linha
+figure('Name','Carregamento de dados e apresentação de características básicas',...
+       'NumberTitle','off','Position',[200 100 800 800]);
+subplot(4,2,[1 2]); % pega colunas 1 e 2 da primeira linha
 plot(t, x);
 xlabel('Tempo (s)');
 ylabel('Amplitude normalizada');
@@ -66,7 +66,7 @@ amp = abs(Xs);
 phase = angle(Xs);   % fase embrulhada (–π..π)
 
 % --- Plot amplitude ---
-subplot(5,2,3);
+subplot(4,2,3);
 plot(freqs_khz, amp, 'b');
 xlabel('Frequência (kHz)');
 ylabel('|X(e^{j\omega})|');
@@ -75,7 +75,7 @@ grid on;
 xlim([min(freqs_khz) max(freqs_khz)]);
 
 % --- Plot fase ---
-subplot(5,2,4);
+subplot(4,2,4);
 plot(freqs_khz, phase, 'b');
 xlabel('Frequência (kHz)');
 ylabel('Fase (rad)');
@@ -92,65 +92,24 @@ num = load(num_file);    % coeficientes numerador
 den = load(den_file);    % coeficientes denominador 
 
 
-%% ------- 1.5 Respostas de magnitude e fase |H(e^{jω})| e θ(ω) -------
+%% ------- 1.5 Respostas de magnitude e fase |H(e^{jω})| e θ(ω) em kHz -------
 
-Nfft = 16384;
-%% Mostrar expressão do filtro no console
-disp('--- Filtro obtido ---');
-H = tf(num, den, 1/fs)
-
-% ----------- a) Escala linear simétrica (-fs/2..+fs/2) ----------
-[H_whole, w_whole] = freqz(num, den, Nfft, 'whole', fs); 
-Hshift = fftshift(H_whole);
-wshift = (-fs/2 : fs/Nfft : fs/2 - fs/Nfft);
-wshift_khz = wshift/1000;
-
-% Magnitude linear
-subplot(5,2,5);
-plot(wshift_khz, abs(Hshift));
-xlabel('f (kHz)');
-ylabel('|H(e^{j\omega})|');
-title('Magnitude (linear)');
-grid on;
-
-% Fase linear
-subplot(5,2,7);
-plot(wshift_khz, angle(Hshift));
-xlabel('f (kHz)');
-ylabel('\theta(\omega) (rad)');
-title('Fase');
-grid on;
-
-% ----------- b) Escala log (dB) 0..fs/2 ----------
-[H, w] = freqz(num, den, Nfft, fs); 
+[H, w] = freqz(num, den, linspace(-fs/2, fs/2, 512), fs); % 1024 ao invés de 512 pontos entre -fs/2 e +fs/2
 w_khz = w/1000;
 
-% Magnitude em dB
-subplot(5,2,6);
-plot(w_khz, 20*log10(abs(H)));
+% Plot magnitude
+figure('Name','Resposta em magnitude do filtro','NumberTitle','off');
+plot(w_khz, 20*log10(abs(H))); % em dB
 xlabel('Frequência (kHz)');
 ylabel('Magnitude (dB)');
-title('Magnitude (dB)');
+title('Resposta em magnitude do filtro');
 grid on;
-ylim([-120 5]); % para destacar
 
-% Fase em graus (unwrap)
-subplot(5,2,8);
-plot(w_khz, unwrap(angle(H))*180/pi);
+% Plot fase
+figure('Name','Resposta em fase do filtro','NumberTitle','off');
+plot(w_khz, unwrap(angle(H)));
 xlabel('Frequência (kHz)');
-ylabel('Fase (graus)');
-title('Fase');
+ylabel('Fase (rad)');
+title('Resposta em fase do filtro');
 grid on;
 
-
-%% ------- 1.6 Resposta ao impulso do filtro -------
-n_samples = 1000;   % quantidade de amostras da resposta ao impulso
-[h, n] = impz(num, den, n_samples);
-
-% Plotar a resposta ao impulso
-subplot(5,2,[9 10]);
-stem(n, h, 'filled');
-xlabel('n');
-ylabel('h[n]');
-title('Resposta ao impulso do filtro');
-grid on;
