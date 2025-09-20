@@ -151,3 +151,87 @@ xlabel('n');
 ylabel('h[n]');
 title('Resposta ao impulso do filtro');
 grid on;
+
+
+%% ===============================================================
+% 2. Implementação de funções para filtragem
+%% ===============================================================
+
+%% ------- 2.1 Filtragem pela equação de diferenças -------
+function y = filtragemPorEqDif(x, num, den)
+    % Normalização para garantir que den(1) = 1
+    if den(1) ~= 1
+        num = num / den(1);
+        den = den / den(1);
+    end
+    
+    Nx = length(x);
+    M = length(num);
+    N = length(den);
+    y = zeros(size(x));
+    
+    % Laço amostra a amostra
+    for n = 1:Nx
+        acc = 0;
+        
+        % Parte do numerador (entradas x[n-k])
+        for k = 1:M
+            if (n-k+1) > 0
+                acc = acc + num(k) * x(n-k+1);
+            end
+        end
+        
+        % Parte do denominador (saídas passadas y[n-k])
+        for k = 2:N
+            if (n-k+1) > 0
+                acc = acc - den(k) * y(n-k+1);
+            end
+        end
+        
+        y(n) = acc;
+    end
+end
+
+
+%% ------- 2.2 Filtragem pela convolução com resposta ao impulso -------
+function [y, h_trunc] = filtragemPorConv(x, h)
+    %% (a) Truncagem da resposta ao impulso
+    % Critério: manter todas as amostras até o último índice cujo valor
+    % seja maior ou igual a 1% do valor de pico da resposta.
+    limiar = 0.01 * max(abs(h));
+    idx = find(abs(h) >= limiar, 1, 'last');
+    h_trunc = h(1:idx);
+
+    %% (b) Apresentação da resposta truncada
+    % Número de amostras após truncagem
+    Nh = length(h_trunc);
+
+    % Exibição
+    figure;
+    stem(0:Nh-1, h_trunc, 'filled');
+    xlabel('n'); ylabel('h_{trunc}[n]');
+    title(['Resposta ao impulso truncada (Nh = ' num2str(Nh) ')']);
+    grid on;
+
+    %% (c) Filtragem por convolução circular (aqui usamos conv -> linear)
+    % A convolução linear equivale à convolução circular com zero-padding
+    % de tamanho adequado (Nx+Nh-1).
+    y = conv(x, h_trunc);
+end
+
+%% ------- 2.3 Filtragem pela multiplicação da FFT -------
+function [y, h_trunc] = filtragemPorFFT(x, h)
+    % Truncagem da resposta ao impulso
+    Nfft = 2^(nextpow2(Nx+Nh-1));  % tamanho adequado da FFT
+    
+    % FFT do sinal e da resposta truncada
+    X = fft(x, Nfft);
+    H = fft(h_trunc, Nfft);
+    
+    % Multiplicação no domínio da frequência
+    Y = X .* H;
+    
+    % IFFT e truncagem para tamanho correto
+    y = real(ifft(Y));
+    y = y(1:Nx+Nh-1);
+end
