@@ -37,7 +37,7 @@ if lower(choice) == 's'
         sound(x, fs);
         pause(N/fs); % toca até o fim
     catch ME
-        warning('Não foi possível reproduzir áudio: %s', ME.message);
+        warning(ME.identifier, 'Não foi possível reproduzir áudio: %s', ME.message);
     end
 else
     fprintf('Ok, o áudio não será reproduzido.\n');
@@ -45,7 +45,7 @@ end
 
 %% ------- 1.2 Gráfico da forma de onda (tempo em s) -------
 figure('Name','1. Carregamento de dados e apresentação de características básicas',...
-       'NumberTitle','off','Position',[250 100 800 500]);
+       'NumberTitle','off','Position',[250 100 800 600]);
 subplot(5,2,[1 2]); % pega colunas 1 e 2 da primeira linha
 plot(t, x);
 xlabel('Tempo (s)');
@@ -95,9 +95,6 @@ den = load(den_file);    % coeficientes denominador
 %% ------- 1.5 Respostas de magnitude e fase |H(e^{jω})| e θ(ω) -------
 
 Nfft = 16384;
-%% Mostrar expressão do filtro no console
-disp('--- Filtro obtido ---');
-H = tf(num, den, 1/fs)
 
 % ----------- a) Escala linear simétrica (-fs/2..+fs/2) ----------
 [H_whole, w_whole] = freqz(num, den, Nfft, 'whole', fs); 
