@@ -29,23 +29,25 @@ t = (0:N-1)/fs;
 %Extra apenas
 
 %% Perguntar ao usuário se deseja ouvir
+fprintf('\n=== Seção 1: Carregamento de dados e apresentação de características básicas  ===\n');
+
 choice = input('Deseja ouvir o áudio? (s/n): ', 's');
 
 if lower(choice) == 's'
     try
-        fprintf('Reproduzindo áudio... (aguarde)\n');
+        fprintf('Reproduzindo áudio... (aguarde)\n\n');
         sound(x, fs);
         pause(N/fs); % toca até o fim
     catch ME
         warning(ME.identifier, 'Não foi possível reproduzir áudio: %s', ME.message);
     end
 else
-    fprintf('Ok, o áudio não será reproduzido.\n');
+    fprintf('Ok, o áudio não será reproduzido.\n\n');
 end
 
 %% ------- 1.2 Gráfico da forma de onda (tempo em s) -------
 figure('Name','1. Carregamento de dados e apresentação de características básicas',...
-       'NumberTitle','off','Position',[250 100 800 600]);
+       'NumberTitle','off','Position',[125 100 1050 600]);
 subplot(5,2,[1 2]); % pega colunas 1 e 2 da primeira linha
 plot(t, x);
 xlabel('Tempo (s)');
@@ -91,6 +93,17 @@ end
 num = load(num_file);    % coeficientes numerador
 den = load(den_file);    % coeficientes denominador 
 
+%% EXTRA: Impressão da função de transferência H(z)
+%fprintf('\n=== Função de transferência H(z) ===\n');
+%Hz = tf(num, den, -1)   % -1 força o domínio z^-1
+
+% Avaliar no ponto z = 1
+%z = 1;
+%H1 = polyval(num, z) / polyval(den, z);
+
+%fprintf('H(z=1) = %.6e\n', H1);
+% ver tamanho/estrutura
+%whos num den
 
 %% ------- 1.5 Respostas de magnitude e fase |H(e^{jω})| e θ(ω) -------
 
@@ -206,13 +219,6 @@ function [y, h_trunc] = filtragemPorConv(x, h)
     % Número de amostras após truncagem
     Nh = length(h_trunc);
 
-    % Exibição
-    figure;
-    stem(0:Nh-1, h_trunc, 'filled');
-    xlabel('n'); ylabel('h_{trunc}[n]');
-    title(['Resposta ao impulso truncada (Nh = ' num2str(Nh) ')']);
-    grid on;
-
     %% (c) Filtragem por convolução circular (aqui usamos conv -> linear)
     % A convolução linear equivale à convolução circular com zero-padding
     % de tamanho adequado (Nx+Nh-1).
@@ -220,18 +226,126 @@ function [y, h_trunc] = filtragemPorConv(x, h)
 end
 
 %% ------- 2.3 Filtragem pela multiplicação da FFT -------
-function [y, h_trunc] = filtragemPorFFT(x, h)
-    % Truncagem da resposta ao impulso
-    Nfft = 2^(nextpow2(Nx+Nh-1));  % tamanho adequado da FFT
-    
+function y = filtragemPorFFT(x, h_trunc)
+    % Comprimentos
+    Nx = length(x);
+    Nh = length(h_trunc);
+
+    % Tamanho da FFT (potência de 2 >= Nx+Nh-1)
+    Nfft = 2^(nextpow2(Nx+Nh-1));  
+
     % FFT do sinal e da resposta truncada
     X = fft(x, Nfft);
     H = fft(h_trunc, Nfft);
-    
+
     % Multiplicação no domínio da frequência
     Y = X .* H;
-    
+
     % IFFT e truncagem para tamanho correto
     y = real(ifft(Y));
     y = y(1:Nx+Nh-1);
+end
+
+
+%% ===============================================================
+% 3. Filtragem do sinal
+%% ===============================================================
+fprintf('\n=== Seção 3: Filtragem do sinal  ===\n');
+
+% --- 3.1 Filtragem pelas três formas ---
+
+% Eq. Diferenças
+y_eqdif = filtragemPorEqDif(x, num, den);
+
+% Convolução com resposta truncada
+[y_conv, h_trunc] = filtragemPorConv(x, h);
+
+% FFT
+y_fft = filtragemPorFFT(x, h_trunc);
+
+%% --- 3.2 Apresentação dos sinais filtrados no tempo e na frequência ---
+Nfft = 16384;  % garantir mesmo tamanho para todos
+freqs = (-Nfft/2 : Nfft/2-1) * (fs / Nfft);
+freqs_khz = freqs / 1000;
+
+figure('Name','3. Filtragem do sinal','NumberTitle','off','Position',[125 100 1050 600]);
+
+% --- Eq. Diferenças ---
+subplot(3,3,1);
+plot(t, y_eqdif);
+xlabel('Tempo (s)'); ylabel('Amplitude');
+title('Eq. Diferenças (tempo)'); grid on;
+
+subplot(3,3,4);
+Yeq = fftshift(fft(y_eqdif, Nfft));
+plot(freqs_khz, 20*log10(abs(Yeq)));
+xlabel('f (kHz)'); ylabel('|Y(f)| dB');
+title('Eq. Diferenças (freq)'); grid on;
+
+subplot(3,3,7);
+plot(freqs_khz, angle(Yeq));
+xlabel('f (kHz)'); ylabel('Fase (rad)');
+title('Eq. Diferenças (fase)'); grid on;
+
+% --- Convolução ---
+subplot(3,3,2);
+plot(t, y_conv(1:N)); 
+xlabel('Tempo (s)'); ylabel('Amplitude');
+title('Convolução (tempo)'); grid on;
+
+subplot(3,3,5);
+Yc = fftshift(fft(y_conv, Nfft));
+plot(freqs_khz, 20*log10(abs(Yc)));
+xlabel('f (kHz)'); ylabel('|Y(f)| dB');
+title('Convolução (freq)'); grid on;
+
+subplot(3,3,8);
+plot(freqs_khz, angle(Yc));
+xlabel('f (kHz)'); ylabel('Fase (rad)');
+title('Convolução (fase)'); grid on;
+
+% --- FFT ---
+subplot(3,3,3);
+plot(t, y_fft(1:N));
+xlabel('Tempo (s)'); ylabel('Amplitude');
+title('FFT (tempo)'); grid on;
+
+subplot(3,3,6);
+Yf = fftshift(fft(y_fft, Nfft));
+plot(freqs_khz, 20*log10(abs(Yf)));
+xlabel('f (kHz)'); ylabel('|Y(f)| dB');
+title('FFT (freq)'); grid on;
+
+subplot(3,3,9);
+plot(freqs_khz, angle(Yf));
+xlabel('f (kHz)'); ylabel('Fase (rad)');
+title('FFT (fase)'); grid on;
+
+%% --- 3.3 Reprodução dos sinais filtrados ---
+
+tocou = false; % flag para saber se algum áudio foi reproduzido
+
+choice = input('a) Deseja ouvir o áudio após filtragem por Equação de Diferenças? (s/n): ','s');
+if lower(choice) == 's'
+    fprintf('Reproduzindo áudio filtrado (Eq. Diferenças)...\n');
+    sound(y_eqdif, fs); pause(N/fs);
+    tocou = true;
+end
+
+choice = input('b) Deseja ouvir o áudio após filtragem por Convolução? (s/n): ','s');
+if lower(choice) == 's'
+    fprintf('Reproduzindo áudio filtrado (Convolução)...\n');
+    sound(y_conv, fs); pause(N/fs);
+    tocou = true;
+end
+
+choice = input('c) Deseja ouvir o áudio após filtragem por FFT? (s/n): ','s');
+if lower(choice) == 's'
+    fprintf('Reproduzindo áudio filtrado (FFT)...\n');
+    sound(y_fft, fs); pause(N/fs);
+    tocou = true;
+end
+
+if ~tocou
+    fprintf('Ok, nenhum áudio será reproduzido.\n');
 end
