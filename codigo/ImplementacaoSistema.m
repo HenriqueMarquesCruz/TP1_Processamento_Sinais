@@ -7,8 +7,8 @@ clear; close all; clc;
 base_dir = fullfile('..','material_fornecido');
 
 audio_file = fullfile(base_dir, 'audio_corrompido.wav');
-num_file   = fullfile(base_dir, 'coefs_num.txt');
-den_file   = fullfile(base_dir, 'coefs_den.txt');
+num_file   = fullfile(base_dir, 'coefs_num.mat');
+den_file   = fullfile(base_dir, 'coefs_den.mat');
 nfft_spec  = 16384;    % pontos para FFT. Poderia ser outra potência de 2, mas 16384 é um compromisso:
 %suficientemente grande para ter boa resolução em Hz, mas sem deixar a FFT lenta
 n_impulse  = 1000;     % número de amostras para resposta ao impulso
@@ -90,8 +90,11 @@ xlim([min(freqs_khz) max(freqs_khz)]);
 if ~exist(num_file,'file') || ~exist(den_file,'file')
     error('Arquivos de coeficientes não encontrados. Esperados: %s e %s', num_file, den_file);
 end
-num = load(num_file);    % coeficientes numerador
-den = load(den_file);    % coeficientes denominador 
+s_num = load(num_file);    % coeficientes numerador
+s_den = load(den_file);    % coeficientes denominador 
+
+num = s_num.num; % conteúdo do campo chamado num dentro da struct s_num.
+den = s_den.den;
 
 %% EXTRA: Impressão da função de transferência H(z)
 %fprintf('\n=== Função de transferência H(z) ===\n');
@@ -132,7 +135,7 @@ title('Fase');
 grid on;
 
 % ----------- b) Escala log (dB) 0..fs/2 ----------
-[H, w] = freqz(num, den, Nfft, fs); 
+[H, w] = freqz(num, den, Nfft, fs);
 w_khz = w/1000;
 
 % Magnitude em dB
@@ -218,6 +221,7 @@ function [y, h_trunc] = filtragemPorConv(x, h)
     %% (b) Apresentação da resposta truncada
     % Número de amostras após truncagem
     Nh = length(h_trunc);
+    %fprintf('Nh: %d', Nh); Apenas para conferir: Nh = 277
 
     %% (c) Filtragem por convolução circular (aqui usamos conv -> linear)
     % A convolução linear equivale à convolução circular com zero-padding
