@@ -1,8 +1,8 @@
 clear; close all; clc;
 
-
+%% ===============================================================
 % 1. Carregamento de dados e apresentação de características básicas 
-
+%% ===============================================================
 %% ------- Parâmetros -------
 base_dir = fullfile('..','material_fornecido');
 
@@ -220,7 +220,7 @@ function [y, h_trunc] = filtragemPorConv(x, h)
 
     %% (b) Apresentação da resposta truncada
     % Número de amostras após truncagem
-    Nh = length(h_trunc);
+    %Nh = length(h_trunc);
     %fprintf('Nh: %d', Nh); Apenas para conferir: Nh = 277
 
     %% (c) Filtragem por convolução circular (aqui usamos conv -> linear)
@@ -347,6 +347,137 @@ choice = input('c) Deseja ouvir o áudio após filtragem por FFT? (s/n): ','s');
 if lower(choice) == 's'
     fprintf('Reproduzindo áudio filtrado (FFT)...\n');
     sound(y_fft, fs); pause(N/fs);
+    tocou = true;
+end
+
+if ~tocou
+    fprintf('Ok, nenhum áudio será reproduzido.\n');
+end
+
+%% ===============================================================
+% 4. BÔNUS: Implementação overlap-add (uso de h_trunc obtido em 2.2)
+%% ===============================================================
+fprintf('\n=== Seção 4: Bônus - Overlap-Add (tempo e FFT) ===\n');
+
+% Parâmetros
+Nx = length(x);
+Nh = length(h_trunc);
+L  = Nh;                    % especificação do enunciado: Nx = Nh (usar L = Nh)
+if L <= 0
+    error('h_trunc vazio ou Nh <= 0. Verifique truncagem em 2.2.');
+end
+Ny = Nx + Nh - 1;
+
+% ---------- Overlap-add usando conv (time-domain block conv) ----------
+tic;
+y_ol_conv = zeros(Ny,1);
+numBlocks = ceil(Nx / L);
+for k = 0:numBlocks-1
+    idx0 = k*L + 1;
+    idx1 = min((k+1)*L, Nx);
+    xblk = x(idx0:idx1);
+    yblk = conv(xblk, h_trunc);             % conv linear do bloco
+    y_ol_conv(idx0:idx0+length(yblk)-1) = y_ol_conv(idx0:idx0+length(yblk)-1) + yblk;
+end
+time_ol_conv = toc;
+fprintf('Overlap-add (conv por bloco) rodou em %.4f s\n', time_ol_conv);
+
+% ---------- Overlap-add usando FFT (freq-domain block conv) ----------
+tic;
+y_ol_fft = zeros(Ny,1);
+for k = 0:numBlocks-1
+    idx0 = k*L + 1;
+    idx1 = min((k+1)*L, Nx);
+    xblk = x(idx0:idx1);
+    % tamanho da FFT por bloco: potência de 2 >= L + Nh - 1
+    Nfft_blk = 2^(nextpow2(length(xblk) + Nh - 1));
+    Xblk = fft(xblk, Nfft_blk);
+    Hblk = fft(h_trunc, Nfft_blk);
+    Yblk = ifft(Xblk .* Hblk);
+    yblk = real(Yblk(1:length(xblk)+Nh-1));
+    y_ol_fft(idx0:idx0+length(yblk)-1) = y_ol_fft(idx0:idx0+length(yblk)-1) + yblk;
+end
+time_ol_fft = toc;
+fprintf('Overlap-add (FFT por bloco) rodou em %.4f s\n', time_ol_fft);
+
+% ---------- Comparações com os métodos anteriores ----------
+% Garantir mesmo comprimento de comparação (trim / zero-pad conforme necessário)
+y_eqdif_tr = y_eqdif(:); y_conv_tr = y_conv(:); y_fft_tr = y_fft(:);
+% Truncar ou pad para Ny
+y_eqdif_tr = [y_eqdif_tr; zeros(max(0, Ny-length(y_eqdif_tr)),1)]; y_eqdif_tr = y_eqdif_tr(1:Ny);
+y_conv_tr  = [y_conv_tr;  zeros(max(0, Ny-length(y_conv_tr)),1)];  y_conv_tr  = y_conv_tr(1:Ny);
+y_fft_tr   = [y_fft_tr;   zeros(max(0, Ny-length(y_fft_tr)),1)];   y_fft_tr   = y_fft_tr(1:Ny);
+
+% Erros relativos entre métodos
+maxabs_olfft_eqdif = max(abs(y_ol_fft - y_eqdif_tr));
+rmsrel_olfft_eqdif = norm(y_ol_fft - y_eqdif_tr) / max(eps, norm(y_eqdif_tr));
+
+maxabs_olconv_eqdif = max(abs(y_ol_conv - y_eqdif_tr));
+rmsrel_olconv_eqdif = norm(y_ol_conv - y_eqdif_tr) / max(eps, norm(y_eqdif_tr));
+
+fprintf('\nComparação numérica (vs EqDif - referência):\n');
+fprintf('Overlap-FFT: max abs diff = %.4e, RMS rel = %.4e\n', maxabs_olfft_eqdif, rmsrel_olfft_eqdif);
+fprintf('Overlap-Conv: max abs diff = %.4e, RMS rel = %.4e\n', maxabs_olconv_eqdif, rmsrel_olconv_eqdif);
+
+% ---------- Tempo de execução resumo (incluindo métodos anteriores) ----------
+% medir tempos dos métodos originais 
+tic; filtragemPorEqDif(x, num, den); t_ref_eqdif = toc;
+tic; [~, ~] = filtragemPorConv(x, h_trunc); t_ref_conv = toc;
+tic; filtragemPorFFT(x, h_trunc); t_ref_fft = toc;
+
+fprintf('\nTempos (estimativa rápida) - EqDif: %.4f s, Conv: %.4f s, FFT: %.4f s\n', ...
+    t_ref_eqdif, t_ref_conv, t_ref_fft);
+fprintf('Overlap-add (conv por bloco): %.4f s, Overlap-add (FFT por bloco): %.4f s\n', time_ol_conv, time_ol_fft);
+
+% ---------- Plots comparativos (tempo + frequência) ----------
+% espectros (usar Nfft já definido anteriormente)
+Y_olfft = fftshift(fft(y_ol_fft, Nfft));
+Y_olconv = fftshift(fft(y_ol_conv, Nfft));
+
+figure('Name','4. Overlap-Add - Comparação','NumberTitle','off','Position',[125 100 1050 700]);
+
+subplot(3,2,1);
+plot(t, y_ol_conv(1:N));
+xlabel('Tempo (s)'); ylabel('Amplitude'); title('Overlap-Add (conv) - tempo'); grid on;
+
+subplot(3,2,3);
+plot(freqs_khz, 20*log10(abs(Y_olconv)));
+xlabel('f (kHz)'); ylabel('|Y| dB'); title('Overlap-Add (conv) - freq'); grid on;
+
+subplot(3,2,2);
+plot(t, y_ol_fft(1:N));
+xlabel('Tempo (s)'); ylabel('Amplitude'); title('Overlap-Add (FFT) - tempo'); grid on;
+
+subplot(3,2,4);
+plot(freqs_khz, 20*log10(abs(Y_olfft)));
+xlabel('f (kHz)'); ylabel('|Y| dB'); title('Overlap-Add (FFT) - freq'); grid on;
+
+% diferenças em tempo (vs EqDif)
+subplot(3,2,5);
+plot(t, (y_ol_fft(1:N) - y_eqdif_tr(1:N)));
+xlabel('Tempo (s)'); ylabel('Erro'); title('Erro: Overlap-FFT - EqDif (tempo)'); grid on;
+
+subplot(3,2,6);
+bar([t_ref_eqdif, t_ref_conv, t_ref_fft, time_ol_conv, time_ol_fft]);
+set(gca,'XTickLabel',{'EqDif','Conv','FFT','OL-Conv','OL-FFT'});
+ylabel('Tempo (s)'); title('Comparação de tempo de execução');
+
+
+%% --- 4.3 Reprodução dos sinais filtrados (Overlap-Add) ---
+
+tocou = false; % flag para saber se algum áudio foi reproduzido
+
+choice = input('Deseja ouvir o áudio após filtragem por Overlap-Add (Conv)? (s/n): ','s');
+if lower(choice) == 's'
+    fprintf('Reproduzindo áudio filtrado (Overlap-Add Conv)...\n');
+    sound(y_ol_conv, fs); pause(N/fs);
+    tocou = true;
+end
+
+choice = input('Deseja ouvir o áudio após filtragem por Overlap-Add (FFT)? (s/n): ','s');
+if lower(choice) == 's'
+    fprintf('Reproduzindo áudio filtrado (Overlap-Add FFT)...\n');
+    sound(y_ol_fft, fs); pause(N/fs);
     tocou = true;
 end
 
