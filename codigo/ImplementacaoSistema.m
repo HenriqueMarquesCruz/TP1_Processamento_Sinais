@@ -128,7 +128,7 @@ grid on;
 
 % Fase linear
 subplot(5,2,7);
-plot(wshift_khz, angle(Hshift));
+plot(wshift_khz, unwrap(angle(Hshift)));
 xlabel('f (kHz)');
 ylabel('\theta(\omega) (rad)');
 title('Fase');
