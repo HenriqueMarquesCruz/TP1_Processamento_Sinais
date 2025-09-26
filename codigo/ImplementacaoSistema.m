@@ -517,30 +517,43 @@ Y_olfft = fftshift(fft(y_ol_fft, Nfft));                           % espectro OL
 Y_olconv = fftshift(fft(y_ol_conv, Nfft));                         % espectro OL-Conv com shift
 
 figure('Name','4. Overlap-Add - Comparação','NumberTitle','off','Position',[125 100 1050 600]); % cria figura para comparação
+tiledlayout(3,3, 'Padding','compact', 'TileSpacing','compact'); % remove espaços em excesso
 
-subplot(3,2,1);                                                    % posição 1 do grid 3x2
+nexttile;                                                    % posição 1ª linha, 1ª coluna
 plot(t, y_ol_conv(1:N));                                           % plota tempo da saída OL-Conv (apenas N amostras)
 xlabel('Tempo (s)'); ylabel('Amplitude'); title('Overlap-Add (conv) - tempo'); grid on;
 
-subplot(3,2,3);                                                    % posição 3 do grid 3x2
+nexttile;                                                  % posição 1ª linha, 2ª coluna (antes era 3ª linha, 1ª col.)
+plot(t, y_ol_fft(1:N));                                            % plota tempo da saída OL-FFT (apenas N amostras)
+xlabel('Tempo (s)'); ylabel('Amplitude'); title('Overlap-Add (FFT) - tempo'); grid on;
+
+nexttile;                                                  % posição 1ª linha, 3ª coluna (NOVO)
+plot(t, (y_ol_conv(1:N) - y_eqdif_tr(1:N)));                       % plota erro no tempo entre OL-Conv e EqDif (apenas N amostras)
+xlabel('Tempo (s)'); ylabel('Erro'); title('Erro Overlap-Conv - EqDif'); grid on;
+
+nexttile;                                                  % posição 2ª linha, 1ª coluna
 plot(freqs_khz, 20*log10(abs(Y_olconv)+eps));                      % plota magnitude em dB do espectro OL-Conv (+eps para evitar log(0))
 xlabel('f (kHz)'); ylabel('|Y| dB'); title('Overlap-Add (conv) - freq'); grid on;
 
-subplot(3,2,2);                                                    % posição 2 do grid 3x2
-plot(t, y_ol_fft(1:N));                                             % plota tempo da saída OL-FFT (apenas N amostras)
-xlabel('Tempo (s)'); ylabel('Amplitude'); title('Overlap-Add (FFT) - tempo'); grid on;
-
-subplot(3,2,4);                                                    % posição 4 do grid 3x2
+nexttile;                                                  % posição 2ª linha, 2ª coluna
 plot(freqs_khz, 20*log10(abs(Y_olfft)+eps));                       % plota magnitude em dB do espectro OL-FFT
 xlabel('f (kHz)'); ylabel('|Y| dB'); title('Overlap-Add (FFT) - freq'); grid on;
 
-subplot(3,2,5);                                                    % posição 5 do grid 3x2
+nexttile;                                                  % posição 2ª linha, 3ª coluna (reposicionado)
 plot(t, (y_ol_fft(1:N) - y_eqdif_tr(1:N)));                        % plota erro no tempo entre OL-FFT e EqDif (apenas N amostras)
-xlabel('Tempo (s)'); ylabel('Erro'); title('Erro: Overlap-FFT - EqDif (tempo)'); grid on;
+xlabel('Tempo (s)'); ylabel('Erro'); title('Erro Overlap-FFT - EqDif (tempo)'); grid on;
 
-subplot(3,2,6);                                                    % posição 6 do grid 3x2
+nexttile;                                                   % posição 3ª linha, 1ª coluna (NOVO)
+plot(t, (y_ol_conv(1:N) - y_conv_tr(1:N)));                        % plota erro entre OL-Conv e convolução direta (apenas N amostras)
+xlabel('Tempo (s)'); ylabel('Erro'); title('Erro Overlap-Conv - Conv direta'); grid on;
+
+nexttile;                                                   % posição 3ª linha, 2ª coluna (NOVO)
+plot(t, (y_ol_fft(1:N) - y_fft_tr(1:N)));                          % plota erro entre OL-FFT e FFT direta (apenas N amostras)
+xlabel('Tempo (s)'); ylabel('Erro'); title('Erro Overlap-FFT - FFT direta'); grid on;
+
+nexttile;                                                   % posição 3ª linha, 3ª coluna (reposicionado)
 bar([t_eq, t_conv, t_fft, t_ol_conv, t_ol_fft]);                   % barra comparativa dos tempos médios
-set(gca,'XTickLabel',{'EqDif','Conv','FFT','OL-Conv','OL-FFT'});    % rótulos das barras
+set(gca,'XTickLabel',{'EqDif','Conv','FFT','OL-Conv','OL-FFT'});   % rótulos das barras
 ylabel('Tempo (s)'); title('Comparação de tempo de execução');
 
 % ----------------- Reprodução dos sinais filtrados (Overlap-Add) ---
