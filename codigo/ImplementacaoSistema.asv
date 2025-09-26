@@ -35,14 +35,14 @@ choice = input('Deseja ouvir o áudio? (s/n): ', 's');
 
 if lower(choice) == 's'
     try
-        fprintf('Reproduzindo áudio... (aguarde)\n');
+        fprintf('Reproduzindo áudio... (aguarde)\n\n');
         sound(x, fs);
         pause(N/fs); % toca até o fim
     catch ME
         warning(ME.identifier, 'Não foi possível reproduzir áudio: %s', ME.message);
     end
 else
-    fprintf('Ok, o áudio não será reproduzido.\n');
+    fprintf('Ok, o áudio não será reproduzido.\n\n');
 end
 
 %% ------- 1.2 Gráfico da forma de onda (tempo em s) -------
@@ -54,6 +54,7 @@ xlabel('Tempo (s)');
 ylabel('Amplitude normalizada');
 title('Forma de onda do áudio corrompido');
 grid on;
+print(gcf,'fig_forma_de_onda.png','-dpng','-r150');
 
 %% ------- 1.3 Espectros de amplitude |X(e^{j\omega})|×f (kHz) e fase θ(ω)×f (kHz) -------
 Nfft = max(nfft_spec, 2^nextpow2(N));
@@ -516,7 +517,7 @@ fprintf('Overlap-Conv: max abs diff = %.4e, RMS rel = %.4e\n\n', maxabs_olconv_e
 Y_olfft = fftshift(fft(y_ol_fft, Nfft));                           % espectro OL-FFT com shift para plot simétrico
 Y_olconv = fftshift(fft(y_ol_conv, Nfft));                         % espectro OL-Conv com shift
 
-figure('Name','4. Overlap-Add - Comparação','NumberTitle','off','Position',[125 100 1050 600]); % cria figura para comparação
+figure('Name','4. Overlap-Add - Comparação','NumberTitle','off','Position',[125 100 1050 700]); % cria figura para comparação
 
 subplot(3,2,1);                                                    % posição 1 do grid 3x2
 plot(t, y_ol_conv(1:N));                                           % plota tempo da saída OL-Conv (apenas N amostras)
