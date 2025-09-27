@@ -510,10 +510,10 @@ rmsrel_olfft_fft = norm(y_ol_fft - y_fft_tr) / max(eps, norm(y_fft_tr));
 maxabs_olconv_conv = max(abs(y_ol_conv - y_conv_tr));              
 rmsrel_olconv_conv = norm(y_ol_conv - y_conv_tr) / max(eps, norm(y_conv_tr)); 
 
-fprintf('\nComparação numérica - Overlap-add vs Equação de Diferenças:\n');           
+fprintf('\nComparação numérica com  Overlap-add vs Equação de Diferenças:\n');           
 fprintf('Overlap-FFT:  erro máximo absoluto = %.4e, erro RMS relativo = %.4e\n', maxabs_olfft_eqdif, rmsrel_olfft_eqdif); 
 fprintf('Overlap-Conv: erro máximo absoluto = %.4e, erro RMS relativo = %.4e\n', maxabs_olconv_eqdif, rmsrel_olconv_eqdif); 
-fprintf('\nComparação numérica - Overlap-add vs métodos diretos:\n');           
+fprintf('\nComparação numérica  Overlap-add vs métodos diretos:\n');           
 fprintf('Overlap-FFT vs FFT direta:  erro máximo absoluto = %.4e, erro RMS relativo = %.4e\n', maxabs_olfft_fft, rmsrel_olfft_fft); 
 fprintf('Overlap-Conv vs Conv direta: erro máximo absoluto = %.4e, erro RMS relativo = %.4e\n\n', maxabs_olconv_conv, rmsrel_olconv_conv); 
 
@@ -522,7 +522,7 @@ fprintf('Overlap-Conv vs Conv direta: erro máximo absoluto = %.4e, erro RMS rel
 Y_olfft = fftshift(fft(y_ol_fft, Nfft));                           % espectro OL-FFT com shift para plot simétrico
 Y_olconv = fftshift(fft(y_ol_conv, Nfft));                         % espectro OL-Conv com shift
 
-figure('Name','4. BÔNUS: Implementação overlap-add','NumberTitle','off','Position',[125 100 1050 600]); % cria figura para comparação
+figure('Name','4. Overlap-Add - Comparação','NumberTitle','off','Position',[125 100 1050 600]); % cria figura para comparação
 tiledlayout(3,3, 'Padding','compact', 'TileSpacing','compact'); % remove espaços em excesso
 
 nexttile;                                                    % posição 1ª linha, 1ª coluna
@@ -547,17 +547,17 @@ xlabel('f (kHz)'); ylabel('|Y| dB'); title('Overlap-Add (FFT) - freq'); grid on;
 
 nexttile;                                                  % posição 2ª linha, 3ª coluna 
 plot(t, (y_ol_fft(1:N) - y_eqdif_tr(1:N)));                        % plota erro no tempo entre OL-FFT e EqDif (apenas N amostras)
-xlabel('Tempo (s)'); ylabel('Erro'); title('Erro Overlap-FFT - EqDif '); grid on;
+xlabel('Tempo (s)'); ylabel('Erro'); title('Erro Overlap-FFT - EqDif (tempo)'); grid on;
 
-nexttile;                                                   % posição 3ª linha, 1ª coluna 
+nexttile;                                                   % posição 3ª linha, 1ª coluna (NOVO)
 plot(t, (y_ol_conv(1:N) - y_conv_tr(1:N)));                        % plota erro entre OL-Conv e convolução direta (apenas N amostras)
 xlabel('Tempo (s)'); ylabel('Erro'); title('Erro Overlap-Conv - Conv direta'); grid on;
 
-nexttile;                                                   % posição 3ª linha, 2ª coluna 
+nexttile;                                                   % posição 3ª linha, 2ª coluna (NOVO)
 plot(t, (y_ol_fft(1:N) - y_fft_tr(1:N)));                          % plota erro entre OL-FFT e FFT direta (apenas N amostras)
 xlabel('Tempo (s)'); ylabel('Erro'); title('Erro Overlap-FFT - FFT direta'); grid on;
 
-nexttile;                                                   % posição 3ª linha, 3ª coluna 
+nexttile;                                                   % posição 3ª linha, 3ª coluna (reposicionado)
 bar([t_eq, t_conv, t_fft, t_ol_conv, t_ol_fft]);                   % barra comparativa dos tempos médios
 set(gca,'XTickLabel',{'EqDif','Conv','FFT','OL-Conv','OL-FFT'});   % rótulos das barras
 ylabel('Tempo (s)'); title('Comparação de tempo de execução');
