@@ -11,7 +11,6 @@ num_file   = fullfile(base_dir, 'coefs_num.mat');
 den_file   = fullfile(base_dir, 'coefs_den.mat');
 nfft_spec  = 16384;    % pontos para FFT. Poderia ser outra potência de 2, mas 16384 é um compromisso:
 %suficientemente grande para ter boa resolução em Hz, mas sem deixar a FFT lenta
-n_impulse  = 1000;     % número de amostras para resposta ao impulso
 
 %% ------- 1.1 Carregamento do áudio e reprodução -------
 if ~exist(audio_file, 'file')
@@ -25,17 +24,17 @@ end
 N = length(x);
 t = (0:N-1)/fs;
 
-%fprintf('Amostras: %d, fs = %d Hz, duração = %.3f s\n', N, fs, N/fs);
 %Extra apenas
+%fprintf('Amostras: %d, fs = %d Hz, duração = %.3f s\n', N, fs, N/fs);
 
 %% Perguntar ao usuário se deseja ouvir
-fprintf('\n=== Seção 1: Carregamento de dados e apresentação de características básicas  ===\n');
+fprintf('TRABALHO PRÁTICO 1\n=== Seção 1: Carregamento de dados e apresentação de características básicas  ===\n');
 
-choice = input('Deseja ouvir o áudio? (s/n): ', 's');
+choice = input('Deseja ouvir o áudio original (corrompido)? (s/n): ', 's');
 
 if lower(choice) == 's'
     try
-        fprintf('Reproduzindo áudio... (aguarde)\n');
+        fprintf('Reproduzindo áudio original (corrompido)... (aguarde)\n');
         sound(x, fs);
         pause(N/fs); % toca até o fim
     catch ME
@@ -64,7 +63,7 @@ freqs = (-Nfft/2 : Nfft/2-1) * (fs / Nfft);   % Hz
 freqs_khz = freqs / 1000;                     % kHz
 
 amp = abs(Xs);
-phase = angle(Xs);   % fase embrulhada (–π..π)
+phase = angle(Xs);   % fase embrulhada [–π,π]
 
 % --- Plot amplitude ---
 subplot(5,2,3);
@@ -112,8 +111,8 @@ den = s_den.den;
 Nfft = 16384;
 
 % ----------- a) Escala linear simétrica (-fs/2..+fs/2) ----------
-[H_whole, w_whole] = freqz(num, den, Nfft, 'whole', fs); 
-Hshift = fftshift(H_whole);
+[H_whole, w_whole] = freqz(num, den, Nfft, 'whole', fs); % 'whole': 0 a fs
+Hshift = fftshift(H_whole);  % -fs/2 a fs/2
 wshift = (-fs/2 : fs/Nfft : fs/2 - fs/Nfft);
 wshift_khz = wshift/1000;
 
@@ -127,14 +126,14 @@ grid on;
 
 % Fase linear
 subplot(5,2,7);
-plot(wshift_khz, unwrap(angle(Hshift)));
+plot(wshift_khz, unwrap(angle(Hshift))); % fase desembrulhada 
 xlabel('f (kHz)');
-ylabel('\theta(\omega) (rad)');
+ylabel('\theta(\omega) (rad)');          
 title('Fase');
 grid on;
 
 % ----------- b) Escala log (dB) 0..fs/2 ----------
-[H, w] = freqz(num, den, Nfft, fs);
+[H, w] = freqz(num, den, Nfft, fs);  % 0 a fs/2.
 w_khz = w/1000;
 
 % Magnitude em dB
@@ -171,7 +170,6 @@ grid on;
 %% ===============================================================
 % 2. Implementação de funções para filtragem
 %% ===============================================================
-
 %% ------- 2.1 Filtragem pela equação de diferenças -------
 function y = filtragemPorEqDif(x, num, den)
     % Normalização para garantir que den(1) = 1
@@ -330,7 +328,7 @@ tocou = false; % flag para saber se algum áudio foi reproduzido
 
 choice = input('a) Deseja ouvir o áudio após filtragem por Equação de Diferenças? (s/n): ','s');
 if lower(choice) == 's'
-    fprintf('Reproduzindo áudio filtrado (Eq. Diferenças)...\n');
+    fprintf('Reproduzindo áudio filtrado (Equação de Diferenças)...\n');
     sound(y_eqdif, fs); pause(N/fs);
     tocou = true;
 end
@@ -360,6 +358,43 @@ end
 
 fprintf('\n=== Seção 4: Bônus - Overlap-Add (Convolução e FFT)  ===\n');  % imprime cabeçalho indicando início da seção 4
 
+% Funções auxiliares: Overlap-Add Conv e FFT
+function y_out = filtragemPorConvOL(x, h_trunc, L, Ny)
+    % ----------------- Overlap-add Convolução -----------------
+    Nx = length(x);
+    y_out = zeros(Ny,1);                                % inicializa vetor de saída com zeros
+    for k = 0:ceil(Nx/L)-1                              % para cada bloco k (índice 0-based lógico)
+        idx0 = k*L + 1;                                 % índice inicial (MATLAB 1-based)
+        idx1 = min((k+1)*L, Nx);                        % índice final do bloco (não passar de Nx)
+        xblk = x(idx0:idx1);                            % extrai o bloco de x
+        yblk = conv(xblk, h_trunc);                     % convolução linear do bloco com h_trunc
+        out_start = idx0;                               % posição de escrita inicial na saída completa
+        out_end = min(Ny, idx0 + length(yblk) - 1);     % posição final (sem ultrapassar Ny)
+        len_write = out_end - out_start + 1;            % número de amostras a escrever
+        y_out(out_start:out_end) = y_out(out_start:out_end) + yblk(1:len_write); % soma (overlap-add)
+    end
+end
+
+function y_out = filtragemPorFFTOl(x, h_trunc, L, Ny, Nfft_blk, Hfft_fixed)
+    % ----------------- Overlap-add FFT -----------------
+    Nx = length(x);
+    Nh = length(h_trunc);
+    y_out = zeros(Ny,1);                                % inicializa saída acumulada
+    for k = 0:ceil(Nx/L)-1                              % para cada bloco
+        idx0 = k*L + 1;                                 % índice inicial (1-based)
+        idx1 = min((k+1)*L, Nx);                        % índice final do bloco
+        xblk = x(idx0:idx1);                            % extrai bloco de x
+        Nblk = length(xblk);                            % comprimento do bloco (pode ser < L no último)
+        Xblk = fft(xblk, Nfft_blk);                     % FFT do bloco (com zero-padding até Nfft_blk)
+        Yblk = ifft(Xblk .* Hfft_fixed);                % multiplicação no domínio freq e IFFT
+        yblk = real(Yblk(1:Nblk+Nh-1));                 % extrai a parte linear relevante e força real
+        out_start = idx0;                               % posição inicial de escrita
+        out_end = min(Ny, idx0 + length(yblk) - 1);     % posição final de escrita (limitada por Ny)
+        len_write = out_end - out_start + 1;            % quantas amostras escrever
+        y_out(out_start:out_end) = y_out(out_start:out_end) + yblk(1:len_write); % soma (overlap-add)
+    end
+end
+
 % ----------------- Preparações -----------------
 % garantir h_trunc (se não existir, gera via filtragemPorConv)
 if ~exist('h_trunc','var') || isempty(h_trunc)            % verifica se a variável h_trunc existe e não está vazia
@@ -367,7 +402,7 @@ if ~exist('h_trunc','var') || isempty(h_trunc)            % verifica se a variá
     [~, h_trunc] = filtragemPorConv(x, h);  % chama a função que gera a resposta truncada e guarda em h_trunc
 end
 
-Nx = length(x);                    % comprimento do sinal de entrada x
+Nx = length(x);                   % comprimento do sinal de entrada x
 Nh = length(h_trunc);             % comprimento da resposta truncada h_trunc
 if Nh <= 0                        % checagem de sanidade: Nh deve ser positivo
     error('h_trunc vazio ou Nh <= 0. Verifique truncagem em 2.2.'); % lança erro se inválido
@@ -378,7 +413,7 @@ Ny = Nx + Nh - 1;                 % comprimento resultante da convolução linea
 reps = 6;    % número de repetições para média de tempo
 
 % --- Warm-up (uma execução de cada para JIT/cache) ---
-y_tmp = filtragemPorEqDif(x, num, den);               % execução única de EqDif para "aquecer" JIT/caches
+y_tmp = filtragemPorEqDif(x, num, den);              % execução única de EqDif para "aquecer" JIT/caches
 [y_tmp2, ~] = filtragemPorConv(x, h_trunc);          % execução única de Conv para warm-up
 y_tmp3 = filtragemPorFFT(x, h_trunc);                % execução única de FFT para warm-up
 
@@ -411,44 +446,21 @@ Nfft_blk = 2^(nextpow2(L + Nh - 1));   % tamanho da FFT por bloco (potência de 
 Hfft_fixed = fft(h_trunc, Nfft_blk);  % pré-computada                      % FFT de h_trunc, calculada uma vez
 
 % Overlap-add Convolução benchmark
-tic;                                                     % inicia cronômetro
+tic;                                                      % inicia cronômetro
 for r = 1:reps                                            % repete reps vezes para média
-    y_ol_conv_bench = zeros(Ny,1);                        % inicializa vetor de saída com zeros
-    for k = 0:numBlocks-1                                 % para cada bloco k (índice 0-based lógico)
-        idx0 = k*L + 1;                                   % índice inicial (MATLAB 1-based)
-        idx1 = min((k+1)*L, Nx);                          % índice final do bloco (não passar de Nx)
-        xblk = x(idx0:idx1);                              % extrai o bloco de x
-        yblk = conv(xblk, h_trunc);                       % convolução linear do bloco com h_trunc
-        out_start = idx0;                                 % posição de escrita inicial na saída completa
-        out_end = min(Ny, idx0 + length(yblk) - 1);       % posição final (sem ultrapassar Ny)
-        len_write = out_end - out_start + 1;              % número de amostras a escrever
-        y_ol_conv_bench(out_start:out_end) = y_ol_conv_bench(out_start:out_end) + yblk(1:len_write); % soma (overlap-add)
-    end
+    y_ol_conv_bench = filtragemPorConvOL(x, h_trunc, L, Ny); % chamada da função auxiliar
 end
 t_ol_conv = toc / reps;                                   % tempo médio OL-Conv (s)
 
 %  Overlap-add FFT benchmark
-tic;                                                     % inicia cronômetro
+tic;                                                      % inicia cronômetro
 for r = 1:reps                                            % repete reps vezes
-    y_ol_fft_bench = zeros(Ny,1);                         % inicializa saída acumulada
-    for k = 0:numBlocks-1                                 % para cada bloco
-        idx0 = k*L + 1;                                   % índice inicial (1-based)
-        idx1 = min((k+1)*L, Nx);                          % índice final do bloco
-        xblk = x(idx0:idx1);                              % extrai bloco de x
-        Nblk = length(xblk);                              % comprimento do bloco (pode ser < L no último)
-        Xblk = fft(xblk, Nfft_blk);                       % FFT do bloco (com zero-padding até Nfft_blk)
-        Yblk = ifft(Xblk .* Hfft_fixed);                  % multiplicação no domínio freq e IFFT
-        yblk = real(Yblk(1:Nblk+Nh-1));                   % extrai a parte linear relevante e força real
-        out_start = idx0;                                 % posição inicial de escrita
-        out_end = min(Ny, idx0 + length(yblk) - 1);       % posição final de escrita (limitada por Ny)
-        len_write = out_end - out_start + 1;              % quantas amostras escrever
-        y_ol_fft_bench(out_start:out_end) = y_ol_fft_bench(out_start:out_end) + yblk(1:len_write); % soma (overlap-add)
-    end
+    y_ol_fft_bench = filtragemPorFFTOl(x, h_trunc, L, Ny, Nfft_blk, Hfft_fixed); % chamada da função auxiliar
 end
 t_ol_fft = toc / reps;                                    % tempo médio OL-FFT (s)
 
 % ----------------- Resultados dos benchmarks -----------------
-fprintf('\nTempos médios (s):\n  EqDif = %.6f\n  Conv  = %.6f\n  FFT   = %.6f\n  OL-Conv = %.6f\n  OL-FFT  = %.6f\n', ...
+fprintf('Tempos médios (s):\n  Equação de Diferenças = %.6f\n  Convolução  = %.6f\n  FFT   = %.6f\n  Convolução Overlap-add = %.6f\n  FFT  Overlap-add = %.6f\n', ...
     t_eq, t_conv, t_fft, t_ol_conv, t_ol_fft);            % imprime os tempos médios formatados
 
 % ----------------- Gerar saídas "reais" (uma execução final) -----------------
@@ -458,37 +470,11 @@ y_eqdif = filtragemPorEqDif(x, num, den);                 % versão final por eq
 y_fft = filtragemPorFFT(x, h_trunc);                      % filtragem por FFT (versão final)
 
 % Executar overlap-add (uma vez) para obter y_ol_conv e y_ol_fft finais
-% (reaproveita Nfft_blk e Hfft_fixed)
-y_ol_conv = zeros(Ny,1);                                  % inicializa saída OL-Conv final
-for k = 0:numBlocks-1                                     % para cada bloco
-    idx0 = k*L + 1;                                       % índice inicial do bloco
-    idx1 = min((k+1)*L, Nx);                              % índice final do bloco
-    xblk = x(idx0:idx1);                                  % extrai bloco
-    yblk = conv(xblk, h_trunc);                           % convolução linear do bloco
-    out_start = idx0;                                     % start de escrita
-    out_end = min(Ny, idx0 + length(yblk) - 1);           % end de escrita
-    len_write = out_end - out_start + 1;                  % comprimento a escrever
-    y_ol_conv(out_start:out_end) = y_ol_conv(out_start:out_end) + yblk(1:len_write); % soma no vetor de saída
-end
+y_ol_conv = filtragemPorConvOL(x, h_trunc, L, Ny);        % execução final OL-Conv
+y_ol_fft  = filtragemPorFFTOl(x, h_trunc, L, Ny, Nfft_blk, Hfft_fixed); % execução final OL-FFT
 
-y_ol_fft = zeros(Ny,1);                                   % inicializa saída OL-FFT final
-for k = 0:numBlocks-1                                     % para cada bloco
-    idx0 = k*L + 1;                                       % índice inicial do bloco
-    idx1 = min((k+1)*L, Nx);                              % índice final do bloco
-    xblk = x(idx0:idx1);                                  % extrai bloco
-    Nblk = length(xblk);                                  % comprimento do bloco
-    Xblk = fft(xblk, Nfft_blk);                           % FFT do bloco
-    Yblk = ifft(Xblk .* Hfft_fixed);                      % multiplicação no domínio freq + IFFT
-    yblk = real(Yblk(1:Nblk+Nh-1));                       % extrai parte relevante e força real
-    out_start = idx0;                                     % start de escrita
-    out_end = min(Ny, idx0 + length(yblk) - 1);           % end de escrita
-    len_write = out_end - out_start + 1;                  % comprimento a escrever
-    y_ol_fft(out_start:out_end) = y_ol_fft(out_start:out_end) + yblk(1:len_write); % soma (overlap-add)
-end
-
-% ----------------- Comparações numéricas (vs EqDif referência) -----------------
+% ----------------- Comparações numéricas -----------------
 % garantir mesmas dimensões
-
 y_eqdif_tr = [y_eqdif(:); zeros(max(0, Ny - length(y_eqdif)), 1)];  % pad com zeros se necessário e garante coluna
 y_eqdif_tr = y_eqdif_tr(1:Ny);                                      % trunca/corta para comprimento Ny
 
@@ -498,18 +484,28 @@ y_conv_tr = y_conv_tr(1:Ny);                                        % garante Ny
 y_fft_tr  = [y_fft(:); zeros(max(0, Ny - length(y_fft)), 1)];       % pad/truncagem para y_fft
 y_fft_tr  = y_fft_tr(1:Ny);                                         % garante Ny
 
-y_ol_conv = y_ol_conv(:);                                            % garante vetor coluna
-y_ol_fft  = y_ol_fft(:);                                             % garante vetor coluna
+y_ol_conv = y_ol_conv(:);                                           % garante vetor coluna
+y_ol_fft  = y_ol_fft(:);                                            % garante vetor coluna
 
-maxabs_olfft_eqdif = max(abs(y_ol_fft - y_eqdif_tr));                % máximo erro absoluto entre OL-FFT e referência
-rmsrel_olfft_eqdif = norm(y_ol_fft - y_eqdif_tr) / max(eps, norm(y_eqdif_tr)); % erro RMS relativo
+% Comparações (erros)
+maxabs_olfft_eqdif = max(abs(y_ol_fft - y_eqdif_tr));                
+rmsrel_olfft_eqdif = norm(y_ol_fft - y_eqdif_tr) / max(eps, norm(y_eqdif_tr)); 
 
-maxabs_olconv_eqdif = max(abs(y_ol_conv - y_eqdif_tr));              % máximo erro absoluto entre OL-Conv e referência
-rmsrel_olconv_eqdif = norm(y_ol_conv - y_eqdif_tr) / max(eps, norm(y_eqdif_tr)); % erro RMS relativo
+maxabs_olconv_eqdif = max(abs(y_ol_conv - y_eqdif_tr));              
+rmsrel_olconv_eqdif = norm(y_ol_conv - y_eqdif_tr) / max(eps, norm(y_eqdif_tr)); 
 
-fprintf('\nComparação numérica (vs EqDif - referência):\n');           % cabeçalho da comparação numérica
-fprintf('Overlap-FFT: max abs diff = %.4e, RMS rel = %.4e\n', maxabs_olfft_eqdif, rmsrel_olfft_eqdif); % imprime métricas OL-FFT
-fprintf('Overlap-Conv: max abs diff = %.4e, RMS rel = %.4e\n\n', maxabs_olconv_eqdif, rmsrel_olconv_eqdif); % imprime métricas OL-Conv
+maxabs_olfft_fft = max(abs(y_ol_fft - y_fft_tr));                
+rmsrel_olfft_fft = norm(y_ol_fft - y_fft_tr) / max(eps, norm(y_fft_tr)); 
+
+maxabs_olconv_conv = max(abs(y_ol_conv - y_conv_tr));              
+rmsrel_olconv_conv = norm(y_ol_conv - y_conv_tr) / max(eps, norm(y_conv_tr)); 
+
+fprintf('\nComparação numérica com  Overlap-add vs Equação de Diferenças:\n');           
+fprintf('Overlap-FFT:  erro máximo absoluto = %.4e, erro RMS relativo = %.4e\n', maxabs_olfft_eqdif, rmsrel_olfft_eqdif); 
+fprintf('Overlap-Conv: erro máximo absoluto = %.4e, erro RMS relativo = %.4e\n', maxabs_olconv_eqdif, rmsrel_olconv_eqdif); 
+fprintf('\nComparação numérica  Overlap-add vs métodos diretos:\n');           
+fprintf('Overlap-FFT vs FFT direta:  erro máximo absoluto = %.4e, erro RMS relativo = %.4e\n', maxabs_olfft_fft, rmsrel_olfft_fft); 
+fprintf('Overlap-Conv vs Conv direta: erro máximo absoluto = %.4e, erro RMS relativo = %.4e\n\n', maxabs_olconv_conv, rmsrel_olconv_conv); 
 
 % ----------------- Plots finais -----------------
 % usar Nfft já definido anteriormente para espectros
@@ -558,17 +554,17 @@ ylabel('Tempo (s)'); title('Comparação de tempo de execução');
 
 % ----------------- Reprodução dos sinais filtrados (Overlap-Add) ---
 tocou = false;                                                      % flag para saber se tocou áudio
-choice = input('Deseja ouvir o áudio após filtragem por Overlap-Add (Conv)? (s/n): ','s'); % pergunta ao usuário
+choice = input('Deseja ouvir o áudio após filtragem por Convolução Overlap-add? (s/n): ','s'); % pergunta ao usuário
 if lower(choice) == 's'                                             % se escolher 's' (sim)
-    fprintf('Reproduzindo áudio filtrado (Overlap-Add Conv)...\n'); % informa
+    fprintf('Reproduzindo áudio filtrado (Convolução Overlap-Add)...\n'); % informa
     sound(y_ol_conv, fs);                                           % toca y_ol_conv com frequência fs
     pause(length(y_ol_conv)/fs);                                    % pausa até terminar de tocar
     tocou = true;                                                   % marca que tocou
 end
 
-choice = input('Deseja ouvir o áudio após filtragem por Overlap-Add (FFT)? (s/n): ','s');  % pergunta para OL-FFT
+choice = input('Deseja ouvir o áudio após filtragem por FFT Overlap-Add? (s/n): ','s');  % pergunta para OL-FFT
 if lower(choice) == 's'                                             % se sim
-    fprintf('Reproduzindo áudio filtrado (Overlap-Add FFT)...\n');  % informa
+    fprintf('Reproduzindo áudio filtrado (FFT Overlap-Add)...\n');  % informa
     sound(y_ol_fft, fs);                                            % toca y_ol_fft
     pause(length(y_ol_fft)/fs);                                     % pausa até terminar
     tocou = true;                                                   % marca que tocou
