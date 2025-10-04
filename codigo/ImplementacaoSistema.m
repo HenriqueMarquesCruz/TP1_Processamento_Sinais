@@ -1,5 +1,26 @@
 clear; close all; clc;
 
+%% --- Forçar figuras proporcionais em qualquer máquina ---
+set(0,'DefaultFigureUnits','pixels');   % força uso de pixels
+screen = get(0,'ScreenSize');          % [left bottom width height] da tela
+
+% Defina aqui a posição/tamanho que deseja manter em TODAS as figuras
+defaultFigPos = [125 100 1050 600];   % [left bottom width height]
+
+% Função auxiliar para criar figuras com posição e tamanho fixos
+function fh = fixedFig(name, pos)
+    scr = get(0,'ScreenSize');
+    % garante que a janela caiba na tela (ajuste mínimo se necessário)
+    left   = max(1, min(pos(1), scr(3)-20));
+    bottom = max(1, min(pos(2), scr(4)-20));
+    width  = min(pos(3), scr(3)-left);
+    height = min(pos(4), scr(4)-bottom);
+    fh = figure('Name', name, 'NumberTitle','off', ...
+                'Units','pixels', 'Position', [left bottom width height]);
+    try set(fh,'WindowState','normal'); catch, end
+    drawnow;
+end
+
 %% ===============================================================
 % 1. Carregamento de dados e apresentação de características básicas 
 %% ===============================================================
@@ -45,8 +66,8 @@ else
 end
 
 %% ------- 1.2 Gráfico da forma de onda (tempo em s) -------
-figure('Name','1. Carregamento de dados e apresentação de características básicas',...
-       'NumberTitle','off','Position',[125 100 1050 600]);
+fig1 = fixedFig('1. Carregamento de dados e apresentação de características básicas', defaultFigPos);
+
 subplot(5,2,[1 2]); % pega colunas 1 e 2 da primeira linha
 plot(t, x);
 xlabel('Tempo (s)');
@@ -278,7 +299,7 @@ Nfft = 16384;  % garantir mesmo tamanho para todos
 freqs = (-Nfft/2 : Nfft/2-1) * (fs / Nfft);
 freqs_khz = freqs / 1000;
 
-figure('Name','3. Filtragem do sinal','NumberTitle','off','Position',[125 100 1050 600]);
+fig2 = fixedFig('3. Filtragem do sinal', defaultFigPos);
 
 % --- Eq. Diferenças ---
 subplot(3,3,1);
@@ -522,7 +543,9 @@ fprintf('Overlap-Conv vs Conv direta: erro máximo absoluto = %.4e, erro RMS rel
 Y_olfft = fftshift(fft(y_ol_fft, Nfft));                           % espectro OL-FFT com shift para plot simétrico
 Y_olconv = fftshift(fft(y_ol_conv, Nfft));                         % espectro OL-Conv com shift
 
-figure('Name','4. BÔNUS: Implementação overlap-add','NumberTitle','off','Position',[125 100 1050 600]); % cria figura para comparação
+fig3 = fixedFig('4. BÔNUS: Implementação overlap-add', defaultFigPos);
+tiledlayout(3,3, 'Padding','compact', 'TileSpacing','compact'); % cria figura para comparação
+
 tiledlayout(3,3, 'Padding','compact', 'TileSpacing','compact'); % remove espaços em excesso
 
 nexttile;                                                    % posição 1ª linha, 1ª coluna
