@@ -84,7 +84,7 @@ Xs = fftshift(X);
 freqs = (-Nfft/2 : Nfft/2-1) * (fs / Nfft);   % Hz
 freqs_khz = freqs / 1000;                     % kHz
 
-amp = abs(Xs);
+amp = 1/N * abs(Xs);
 phase = angle(Xs);   % fase embrulhada [–π,π]
 
 % --- Plot amplitude ---
@@ -165,7 +165,7 @@ xlabel('Frequência (kHz)');
 ylabel('Magnitude (dB)');
 title('Magnitude (dB)');
 grid on;
-ylim([-120 5]); % para destacar
+ylim([-420 20]); % para destacar
 
 % Fase em graus (unwrap)
 subplot(5,2,8);
@@ -271,7 +271,7 @@ function y = filtragemPorConv(x, h)
     % Obs.: justo usar cconv para efeitos de comparação, uma vez que 
     % a filtragem por FFT também se utiliza de funções nativas (fft e ifft)
 
-    % De qualquer forma, segue o método sem as otimizações da função cconv:
+    % De qualquer forma, segue o Método "bruto" sem as otimizações da função cconv:
     % x = x(:).';
     % h = h(:).';
     % 
@@ -310,7 +310,7 @@ function y = filtragemPorFFT(x, h)
     Y = X .* H;
 
     % IFFT e truncagem para tamanho correto
-    y = real(ifft(Y));
+    y = (real(ifft(Y)));
     y = y(1:Nx+Nh-1);
 end
 
@@ -332,10 +332,6 @@ y_conv = filtragemPorConv(x, h_trunc);
 y_fft = filtragemPorFFT(x, h_trunc);
 
 %% --- 3.2 Apresentação dos sinais filtrados no tempo e na frequência ---
-Nfft = 16384;  % garantir mesmo tamanho para todos
-freqs = (-Nfft/2 : Nfft/2-1) * (fs / Nfft);
-freqs_khz = freqs / 1000;
-
 fig3 = fixedFig('3. Filtragem do sinal', defaultFigPos);
 figure(fig3);  % força ativação da janela correta
 
@@ -345,10 +341,12 @@ plot(t, y_eqdif);
 xlabel('Tempo (s)'); ylabel('Amplitude');
 title('Eq. Diferenças (tempo)'); grid on;
 
+freqs_eq = linspace(-fs/2, fs/2, length(y_eqdif));
+freqs_khz_eq = freqs_eq / 1000;
 subplot(3,3,4);
-Yeq = fftshift(fft(y_eqdif, Nfft));
-plot(freqs_khz, 20*log10(abs(Yeq)));
-xlabel('f (kHz)'); ylabel('|Y(f)| dB');
+Yeq = fftshift(fft(y_eqdif))/length(y_eqdif); 
+semilogy(freqs_khz_eq, abs(Yeq));
+xlabel('f (kHz)'); ylabel('|Y(f)|');
 title('Eq. Diferenças (freq)'); grid on;
 
 subplot(3,3,7);
@@ -362,14 +360,16 @@ plot(t, y_conv(1:N));
 xlabel('Tempo (s)'); ylabel('Amplitude');
 title('Convolução (tempo)'); grid on;
 
+freqs_c = linspace(-fs/2, fs/2, length(y_conv));
+freqs_khz_c = freqs_c / 1000;
 subplot(3,3,5);
-Yc = fftshift(fft(y_conv, Nfft));
-plot(freqs_khz, 20*log10(abs(Yc)));
-xlabel('f (kHz)'); ylabel('|Y(f)| dB');
+Yc = fftshift(fft(y_conv))/length(y_conv); 
+semilogy(freqs_khz_c, abs(Yc));
+xlabel('f (kHz)'); ylabel('|Y(f)|');
 title('Convolução (freq)'); grid on;
 
 subplot(3,3,8);
-plot(freqs_khz, angle(Yc));
+plot(freqs_khz_c, angle(Yc));
 xlabel('f (kHz)'); ylabel('Fase (rad)');
 title('Convolução (fase)'); grid on;
 
@@ -379,14 +379,16 @@ plot(t, y_fft(1:N));
 xlabel('Tempo (s)'); ylabel('Amplitude');
 title('FFT (tempo)'); grid on;
 
+freqs_fft = linspace(-fs/2, fs/2, length(y_fft));
+freqs_khz_fft = freqs_fft / 1000;
 subplot(3,3,6);
-Yf = fftshift(fft(y_fft, Nfft));
-plot(freqs_khz, 20*log10(abs(Yf)));
-xlabel('f (kHz)'); ylabel('|Y(f)| dB');
+Yf = fftshift(fft(y_fft))/length(y_fft); 
+semilogy(freqs_khz_fft, abs(Yf));
+xlabel('f (kHz)'); ylabel('|Y(f)|');
 title('FFT (freq)'); grid on;
 
 subplot(3,3,9);
-plot(freqs_khz, angle(Yf));
+plot(freqs_khz_fft, angle(Yf));
 xlabel('f (kHz)'); ylabel('Fase (rad)');
 title('FFT (fase)'); grid on;
 
@@ -491,7 +493,7 @@ Ny = Nx + Nh - 1;                 % comprimento resultante da convolução (saí
 reps = 6;    % número de repetições para média de tempo
 
 % --- Warm-up (uma execução de cada para JIT/cache) ---
-y_tmp = filtragemPorEqDif(x, num, den);              % execução única de EqDif para "aquecer" JIT/caches
+y_tmp1 = filtragemPorEqDif(x, num, den);              % execução única de EqDif para "aquecer" JIT/caches
 y_tmp2 = filtragemPorConv(x, h_trunc);          % execução única de Conv para warm-up
 y_tmp3 = filtragemPorFFT(x, h_trunc);                % execução única de FFT para warm-up
 
@@ -589,16 +591,20 @@ fprintf('Overlap-FFT vs FFT direta:  erro máximo absoluto = %.4e, erro RMS rela
 fprintf('Overlap-Conv vs Conv direta: erro máximo absoluto = %.4e, erro RMS relativo = %.4e\n\n', maxabs_olconv_conv, rmsrel_olconv_conv); 
 
 % ----------------- Plots finais -----------------
-% usar Nfft já definido anteriormente para espectros
-Y_olfft = fftshift(fft(y_ol_fft, Nfft));                           % espectro OL-FFT com shift para plot simétrico
-Y_olconv = fftshift(fft(y_ol_conv, Nfft));                         % espectro OL-Conv com shift
+Y_olfft = fftshift(fft(y_ol_fft)) / length(y_ol_fft);     % espectro OL-FFT
+Y_olconv = fftshift(fft(y_ol_conv)) / length(y_ol_conv);  % espectro OL-Conv
+
+% Eixos de frequência baseados no tamanho real de cada sinal
+freqs_olfft = linspace(-fs/2, fs/2, length(y_ol_fft));
+freqs_khz_olfft = freqs_olfft / 1000;
+
+freqs_olconv = linspace(-fs/2, fs/2, length(y_ol_conv));
+freqs_khz_olconv = freqs_olconv / 1000;
 
 fig4 = fixedFig('4. BÔNUS: Implementação overlap-add', defaultFigPos);
 figure(fig4);  % força ativação da janela correta
 
 tiledlayout(3,3, 'Padding','compact', 'TileSpacing','compact'); % cria figura para comparação
-
-tiledlayout(3,3, 'Padding','compact', 'TileSpacing','compact'); % remove espaços em excesso
 
 nexttile;                                                    % posição 1ª linha, 1ª coluna
 plot(t, y_ol_conv(1:N));                                           % plota tempo da saída OL-Conv (apenas N amostras)
@@ -613,12 +619,12 @@ plot(t, (y_ol_conv(1:N) - y_eqdif_tr(1:N)));                       % plota erro 
 xlabel('Tempo (s)'); ylabel('Erro'); title('Erro Overlap-Conv - EqDif'); grid on;
 
 nexttile;                                                  % posição 2ª linha, 1ª coluna
-plot(freqs_khz, 20*log10(abs(Y_olconv)+eps));                      % plota magnitude em dB do espectro OL-Conv (+eps para evitar log(0))
-xlabel('f (kHz)'); ylabel('|Y| dB'); title('Overlap-Add (conv) - freq'); grid on;
+semilogy(freqs_khz_olconv, abs(Y_olconv));                      % plota magnitude do espectro OL-Conv
+xlabel('f (kHz)'); ylabel('|Y|'); title('Overlap-Add (conv) - freq'); grid on;
 
 nexttile;                                                  % posição 2ª linha, 2ª coluna
-plot(freqs_khz, 20*log10(abs(Y_olfft)+eps));                       % plota magnitude em dB do espectro OL-FFT
-xlabel('f (kHz)'); ylabel('|Y| dB'); title('Overlap-Add (FFT) - freq'); grid on;
+semilogy(freqs_khz_olfft, abs(Y_olfft));                       % plota magnitude do espectro OL-FFT
+xlabel('f (kHz)'); ylabel('|Y|'); title('Overlap-Add (FFT) - freq'); grid on;
 
 nexttile;                                                  % posição 2ª linha, 3ª coluna 
 plot(t, (y_ol_fft(1:N) - y_eqdif_tr(1:N)));                        % plota erro no tempo entre OL-FFT e EqDif (apenas N amostras)
