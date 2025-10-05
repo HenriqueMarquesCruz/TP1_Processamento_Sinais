@@ -4,13 +4,13 @@ clear; close all; clc;
 set(0,'DefaultFigureUnits','pixels');   % força uso de pixels
 screen = get(0,'ScreenSize');          % [left bottom width height] da tela
 
-% Defina aqui a posição/tamanho que deseja manter em TODAS as figuras
+% Posição/tamanho 
 defaultFigPos = [125 100 1050 600];   % [left bottom width height]
 
 % Função auxiliar para criar figuras com posição e tamanho fixos
 function fh = fixedFig(name, pos)
     scr = get(0,'ScreenSize');
-    % garante que a janela caiba na tela (ajuste mínimo se necessário)
+    % garante que a janela caiba na tela 
     left   = max(1, min(pos(1), scr(3)-20));
     bottom = max(1, min(pos(2), scr(4)-20));
     width  = min(pos(3), scr(3)-left);
@@ -175,7 +175,6 @@ ylabel('Fase (graus)');
 title('Fase');
 grid on;
 
-
 %% ------- 1.6 Resposta ao impulso do filtro -------
 n_samples = 1000;   % quantidade de amostras da resposta ao impulso
 [h, n] = impz(num, den, n_samples);
@@ -231,7 +230,6 @@ function y = filtragemPorEqDif(x, num, den)
     end
 end
 
-
 %% ------- 2.2 Filtragem pela convolução com resposta ao impulso -------
 %% (a) Truncagem da resposta ao impulso
 function h_trunc = truncarResposta(h)
@@ -259,12 +257,40 @@ ylabel('h_{trunc}[n]');
 title(sprintf('Resposta ao impulso truncada (Nh = %d)', Nh));
 grid on;
 
-
-%% (c) Filtragem por convolução circular (aqui usamos conv -> linear)
+%% (c) Filtragem por convolução circular
 function y = filtragemPorConv(x, h)
-    % A convolução linear equivale à convolução circular com zero-padding
-    % de tamanho adequado (Nx+Nh-1).
-    y = conv(x, h);
+    % A convolução circular é feita pelo comando cconv
+    % O tamanho é definido como Nx + Nh - 1
+    Nx = length(x);
+    Nh = length(h);
+    N  = Nx + Nh - 1;  % mesmo tamanho pedido no enunciado
+
+    y = cconv(x, h, N);
+    y = y(:);  % garante vetor coluna
+    
+    % Obs.: justo usar cconv para efeitos de comparação, uma vez que 
+    % a filtragem por FFT também se utiliza de funções nativas (fft e ifft)
+
+    % De qualquer forma, segue o método sem as otimizações da função cconv:
+    % x = x(:).';
+    % h = h(:).';
+    % 
+    % Nx = length(x);
+    % Nh = length(h);
+    % Ny = Nx + Nh - 1;
+    % 
+    % % Zero-padding até Ny
+    % x_pad = [x zeros(1, Ny - Nx)];
+    % h_pad = [h zeros(1, Ny - Nh)];
+    % 
+    % % Convolução circular
+    % y = zeros(1, Ny);
+    % for n = 0:Ny-1
+    %     y(n+1) = sum(x_pad .* circshift(fliplr(h_pad), [0 n]));
+    % end
+    % 
+    % % Garante saída como vetor coluna
+    % y = y(:);
 end
 
 %% ------- 2.3 Filtragem pela multiplicação da FFT -------
@@ -393,27 +419,39 @@ if ~tocou
     fprintf('Ok, nenhum áudio será reproduzido.\n');
 end
 
+
 %% ===============================================================
-% 4. BÔNUS: Implementação overlap-add (uso de h_trunc obtido em 2.2)
-%         + Benchmarks limpos (EqDif, Conv, FFT, OL-Conv, OL-FFT)
+% 4. BÔNUS: Implementação overlap-add 
+%         + Benchmarks (EqDif, Conv, FFT, OL-Conv, OL-FFT)
 %% ===============================================================
 fprintf('\n=== Seção 4: Bônus - Overlap-Add (Convolução e FFT)  ===\n');  % imprime cabeçalho indicando início da seção 4
 % Funções auxiliares: Overlap-Add Conv e FFT
 function y_out = filtragemPorConvOL(x, h_trunc, L, Ny)
-    % ----------------- Overlap-add Convolução -----------------
+    % ----------------- Overlap-Add usando convolução circular -----------------
     Nx = length(x);
-    y_out = zeros(Ny,1);                                % inicializa vetor de saída com zeros
-    for k = 0:ceil(Nx/L)-1                              % para cada bloco k (índice 0-based lógico)
-        idx0 = k*L + 1;                                 % índice inicial (MATLAB 1-based)
-        idx1 = min((k+1)*L, Nx);                        % índice final do bloco (não passar de Nx)
-        xblk = x(idx0:idx1);                            % extrai o bloco de x
-        yblk = conv(xblk, h_trunc);                     % convolução linear do bloco com h_trunc
-        out_start = idx0;                               % posição de escrita inicial na saída completa
-        out_end = min(Ny, idx0 + length(yblk) - 1);     % posição final (sem ultrapassar Ny)
-        len_write = out_end - out_start + 1;            % número de amostras a escrever
-        y_out(out_start:out_end) = y_out(out_start:out_end) + yblk(1:len_write); % soma (overlap-add)
+    y_out = zeros(Ny,1);  % inicializa vetor de saída com zeros
+
+    for k = 0:ceil(Nx/L)-1
+        idx0 = k*L + 1;                  % índice inicial do bloco
+        idx1 = min((k+1)*L, Nx);         % índice final (não ultrapassar Nx)
+        xblk = x(idx0:idx1);             % bloco atual de entrada
+
+        % ---------- Convolução circular (mesmo código de filtragemPorConv) ----------
+        Nx_blk = length(xblk);
+        Nh = length(h_trunc);
+        N  = Nx_blk + Nh - 1;            % tamanho da convolução circular
+        yblk = cconv(xblk, h_trunc, N);  % filtragem circular
+        yblk = yblk(:);                  % vetor coluna
+        % ---------------------------------------------------------------------------
+
+        % ---------- Etapa de Overlap-Add ----------
+        out_start = idx0;                                % posição inicial na saída
+        out_end = min(Ny, idx0 + length(yblk) - 1);       % posição final (sem ultrapassar Ny)
+        len_write = out_end - out_start + 1;              % nº de amostras a escrever
+        y_out(out_start:out_end) = y_out(out_start:out_end) + yblk(1:len_write);
     end
 end
+
 
 function y_out = filtragemPorFFTOl(x, h_trunc, L, Ny, Nfft_blk, Hfft_fixed)
     % ----------------- Overlap-add FFT -----------------
@@ -447,7 +485,7 @@ Nh = length(h_trunc);             % comprimento da resposta truncada h_trunc
 if Nh <= 0                        % checagem: Nh deve ser positivo
     error('h_trunc vazio ou Nh <= 0. Verifique truncagem em 2.2.'); % lança erro se inválido
 end
-Ny = Nx + Nh - 1;                 % comprimento resultante da convolução linear (saida completa)
+Ny = Nx + Nh - 1;                 % comprimento resultante da convolução (saída completa)
 
 % Parâmetros de benchmark
 reps = 6;    % número de repetições para média de tempo
